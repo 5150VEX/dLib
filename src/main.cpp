@@ -1,73 +1,79 @@
 #include "main.h"
 #include "dlib/dlib.hpp"
-#include "pros/misc.h"
+#include "dlib/builtin.hpp"
+#include <initializer_list>
 
-// Robot Constructor
-// Initialize your robot inside of this constructor!
+// User-built class, constructed from dlib components
 struct Robot {
-    dlib::Chassis chassis = dlib::Chassis(
-		{1,2,3},
-    	{1,2,3},
-    	1,
-    	1
-    );
+    dlib::DifferentialChassis chassis;
+    dlib::InternalMotorEncoders encoders;
 
-    dlib::PID drive_pid = dlib::PID(
-        {},
-        1
-    );
+    dlib::BasicPID move_pid;
+    dlib::BasicPID turn_pid;
 
-    dlib::PID turn_pid = dlib::PID(
-        {},
-        1
-    );
+    Robot(
+        std::initializer_list<int8_t> left_ports,
+        std::initializer_list<int8_t> right_ports, 
+        double drive_rpm,
+        double wheel_diameter,
+        pros::MotorGearset chassis_gearset,
+        dlib::BasicPID move_pid, 
+        dlib::BasicPID turn_pid
+    ) : 
+        chassis(left_ports, right_ports, drive_rpm, wheel_diameter, chassis_gearset), 
+        encoders(chassis), move_pid(move_pid), turn_pid(turn_pid) {
+    };
 
-    dlib::Odom odom = dlib::Odom(
-        1,
-        1
-    );
-
-    dlib::Chassis& get_chassis() {
-        return chassis;
+    void initialize() {
+        encoders.reset();
     }
 
-    dlib::PID& get_drive_pid() {
-        return drive_pid;
-    }
-
-    dlib::PID& get_turn_pid() {
-        return turn_pid;
-    }
-
-    dlib::Odom& get_odom() {
-        return odom;
+    // TODO: Try to find a way to eliminate the 'glue code' that delegates to builtin methods
+    void move_with_pid(double distance, dlib::PIDOptions options) {
+        dlib::move_with_pid(
+            chassis,
+            encoders, 
+            move_pid, 
+            distance, 
+            options
+        );
     }
 };
-
-// instantiate a Robot object
-Robot robot = Robot();
 
 // instantiate a Controller object
 pros::Controller master(pros::E_CONTROLLER_MASTER);
 
+dlib::BasicPID move_pid = dlib::BasicPID({5, 0, 0});
+dlib::BasicPID turn_pid = dlib::BasicPID({5, 0, 0});
+
+Robot robot = Robot(
+    {18,19,17},
+    {-14,-16,-11}, 
+    450, 
+    3.25, 
+    pros::MotorGearset::blue,
+    move_pid, 
+    turn_pid
+);
+
 void initialize() {}
 
-void disabled() {}
+void disabled() {
+}
 
 void competition_initialize() {}
 
 void autonomous() {
+    // Initialize
+    robot.initialize();
+
     // Try some movements!
-    dlib::move_voltage(robot,127);
+    robot.move_with_pid(24, dlib::PIDOptions{ .error_threshold = 1, .settle_ms = 250, .timeout_ms = 0});
 }
 
 void opcontrol() {
     while(true){
-        // basic arcade using dLib
-        double power = master.get_analog(pros::E_CONTROLLER_ANALOG_LEFT_Y);
-        double turn = master.get_analog(pros::E_CONTROLLER_ANALOG_RIGHT_X);
-        dlib::arcade(robot, power, turn);
-
+        
         pros::delay(20);
     }
 }
